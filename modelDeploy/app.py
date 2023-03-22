@@ -97,9 +97,7 @@ def dynamicPredictPage():
     # -----------------------------
     try:
 
-        finalDf = helperFunctions.predictDynamic(
-            modelPipe, X_testDate, X_test, dateOption
-        )
+        finalDf = helperFunctions.predictDynamic(modelPipe, X_testDate, dateOption)
 
         finalDf["Predicted_Attendance"] = finalDf["Predicted_Attendance"].astype("int")
 

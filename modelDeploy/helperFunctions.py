@@ -260,10 +260,10 @@ def predict2023NoWeatherBulk(modelPipe, X_test, X_testDate):
 # Prediction function for Weather and Dynamics
 
 
-def predictDynamic(modelPipe, X_testDate, X_test, datePlaying):
+def predictDynamic(modelPipe, X_testDate, datePlaying):
 
     # Get the weather for the specific
-    cityName = X_testDate[X_testDate["Date"] == datePlaying]["CITY_StdCap"][0]
+    cityName = X_testDate[X_testDate["Date"] == datePlaying]["CITY_StdCap"].values[0]
 
     # Get the weather
     weatherDict = get_weather(cityName, datePlaying)
