@@ -12,7 +12,7 @@ import helperFunctions2022
 def get_data():
 
     df_comb = pd.read_csv(
-        r"C:\Users\Sande\OneDrive - MNSCU\4_Semester\MinneMUDAC2023\modelDeploy\df_combUP.csv"
+        "https://media.githubusercontent.com/media/sharmajee499/MinneMUDAC2023/main/modelDeploy/df_combUP.csv"
     )
 
     return df_comb
