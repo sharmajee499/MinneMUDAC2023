@@ -1,5 +1,8 @@
 # Libraries Import
 
+# For background image
+import base64
+
 import pandas as pd
 import numpy as np
 import warnings
@@ -22,10 +25,14 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_percentage_error
 from sklearn.metrics import r2_score
+from lightgbm import LGBMRegressor
 
 # weather
 from geopy.geocoders import Nominatim
 import requests
+
+
+import streamlit as st
 
 # ------------------------------------------------------------------------------------------------
 
@@ -41,7 +48,7 @@ def prepareDataTeam(df_combined, teamName, withWeather: bool):
     # Columns list for subsetting
     dropColX = [
         "Date",
-        "Year_StdCap",
+        "Year",
         "Attendance",
         "Capacity_StdCap",
         "CITY_StdCap",
@@ -60,8 +67,7 @@ def prepareDataTeam(df_combined, teamName, withWeather: bool):
 
         X_train = (
             df_combined[
-                (df_combined["Year_StdCap"] != 2023)
-                & (df_combined["HomeTeam"] == teamName)
+                (df_combined["Year"] != 2023) & (df_combined["HomeTeam"] == teamName)
             ]
             .drop(dropColX + weatherCol, axis=1)
             .reset_index(drop=True)
@@ -69,13 +75,12 @@ def prepareDataTeam(df_combined, teamName, withWeather: bool):
         X_train.fillna(value=0, inplace=True)
 
         y_train = df_combined[
-            (df_combined["Year_StdCap"] != 2023) & (df_combined["HomeTeam"] == teamName)
+            (df_combined["Year"] != 2023) & (df_combined["HomeTeam"] == teamName)
         ]["Occ_Per"].reset_index(drop=True)
 
         X_test = (
             df_combined[
-                (df_combined["Year_StdCap"] == 2023)
-                & (df_combined["HomeTeam"] == teamName)
+                (df_combined["Year"] == 2023) & (df_combined["HomeTeam"] == teamName)
             ]
             .drop(dropColX + weatherCol, axis=1)
             .reset_index(drop=True)
@@ -84,7 +89,7 @@ def prepareDataTeam(df_combined, teamName, withWeather: bool):
 
         # We will also output data for later purpose
         X_testDate = df_combined[
-            (df_combined["Year_StdCap"] == 2023) & (df_combined["HomeTeam"] == teamName)
+            (df_combined["Year"] == 2023) & (df_combined["HomeTeam"] == teamName)
         ][["Date", "Capacity_StdCap", "CITY_StdCap"]].reset_index(drop=True)
 
         return X_train, y_train, X_test, X_testDate
@@ -94,8 +99,7 @@ def prepareDataTeam(df_combined, teamName, withWeather: bool):
 
         X_train = (
             df_combined[
-                (df_combined["Year_StdCap"] != 2023)
-                & (df_combined["HomeTeam"] == teamName)
+                (df_combined["Year"] != 2023) & (df_combined["HomeTeam"] == teamName)
             ]
             .drop(dropColX, axis=1)
             .reset_index(drop=True)
@@ -107,7 +111,7 @@ def prepareDataTeam(df_combined, teamName, withWeather: bool):
         ].fillna(value=0)
 
         y_train = df_combined[
-            (df_combined["Year_StdCap"] != 2023) & (df_combined["HomeTeam"] == teamName)
+            (df_combined["Year"] != 2023) & (df_combined["HomeTeam"] == teamName)
         ]["Occ_Per"].reset_index(drop=True)
 
         # Same with the y_train
@@ -115,8 +119,7 @@ def prepareDataTeam(df_combined, teamName, withWeather: bool):
 
         X_test = (
             df_combined[
-                (df_combined["Year_StdCap"] == 2023)
-                & (df_combined["HomeTeam"] == teamName)
+                (df_combined["Year"] == 2023) & (df_combined["HomeTeam"] == teamName)
             ]
             .drop(dropColX, axis=1)
             .reset_index(drop=True)
@@ -130,7 +133,7 @@ def prepareDataTeam(df_combined, teamName, withWeather: bool):
         # This stores the Date Column of the 2023
         # X_testDate = df_combined[(df_combined['Year_StdCap'] == 2023) & (df_combined['HomeTeam'] == teamName)][['Date', 'Capacity_StdCap', 'CITY_StdCap']].reset_index(drop=True)
         X_testDate = df_combined[
-            (df_combined["Year_StdCap"] == 2023) & (df_combined["HomeTeam"] == teamName)
+            (df_combined["Year"] == 2023) & (df_combined["HomeTeam"] == teamName)
         ].reset_index(drop=True)
 
         # Return Values
@@ -210,12 +213,36 @@ def trainModel(X_train, y_train):
         sparse_threshold=0,
     )
 
+    # Initialize the LGBM Model
+    lgbmModel = LGBMRegressor(
+        boosting_type="gbdt",
+        class_weight=None,
+        colsample_bytree=1.0,
+        importance_type="split",
+        learning_rate=0.1,
+        max_depth=-1,
+        min_child_samples=20,
+        min_child_weight=0.001,
+        min_split_gain=0.0,
+        n_estimators=100,
+        n_jobs=-1,
+        num_leaves=31,
+        objective=None,
+        random_state=1122,
+        reg_alpha=0.0,
+        reg_lambda=0.0,
+        silent="warn",
+        subsample=1.0,
+        subsample_for_bin=200000,
+        subsample_freq=0,
+    )
+
     # Pipeline with Model
     modelPipe = Pipeline(
         [
             ("coltr", colTrans),
             # ("pca", PCA(n_components=30, random_state=1122)),
-            ("dt", DecisionTreeRegressor(random_state=1122)),
+            ("lgbm", lgbmModel),
         ]
     )
 
@@ -240,7 +267,7 @@ def predict2023NoWeatherBulk(modelPipe, X_test, X_testDate):
     y_pred = modelPipe.predict(X_test)
 
     # Predict the Attendance (We have predicted 'Occ_Per', to get atttendance we multiply with Capacity_StdCap)
-    X_test["Attendance"] = np.round(y_pred * X_testDate["Capacity_StdCap"], 0)
+    X_test["Predicted_Attendance"] = np.round(y_pred * X_testDate["Capacity_StdCap"], 0)
 
     # Add the date column
     X_test["Date"] = X_testDate["Date"]
@@ -249,7 +276,7 @@ def predict2023NoWeatherBulk(modelPipe, X_test, X_testDate):
     X_test["Capacity_StdCap"] = X_testDate["Capacity_StdCap"]
 
     # Columns that we need
-    colNeed = ["Date", "HomeTeam", "VisitingTeam", "Attendance"]
+    colNeed = ["Date", "HomeTeam", "VisitingTeam", "Predicted_Attendance"]
 
     finalDf = X_test[colNeed]
 
@@ -279,14 +306,7 @@ def predictDynamic(modelPipe, X_testDate, datePlaying):
     predData["temp_min"] = weatherDict["temp_min"][0]
 
     # Drop the un-necessary columns
-    dropColX = [
-        "Date",
-        "Year_StdCap",
-        "Attendance",
-        "Capacity_StdCap",
-        "CITY_StdCap",
-        "Occ_Per",
-    ]
+    dropColX = ["Date", "Attendance", "Capacity_StdCap", "CITY_StdCap", "Occ_Per"]
     finalPredData = predData.drop(dropColX, axis=1)
 
     # Fill the NAs with zero as decided
@@ -302,3 +322,19 @@ def predictDynamic(modelPipe, X_testDate, datePlaying):
     colNeed = ["Date", "HomeTeam", "VisitingTeam", "Predicted_Attendance"]
 
     return predData[colNeed]
+
+
+def add_bg_from_local(image_file):
+    with open(image_file, "rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read())
+    st.markdown(
+        f"""
+    <style>
+    .stApp {{
+        background-image: url(data:image/{"jpg"};base64,{encoded_string.decode()});
+        background-size: cover
+    }}
+    </style>
+    """,
+        unsafe_allow_html=True,
+    )
